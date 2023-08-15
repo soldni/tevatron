@@ -1,0 +1,3 @@
+torch
+transformers[torch]>=4.10.0
+adapter-transformers
