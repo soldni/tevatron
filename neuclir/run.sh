@@ -47,7 +47,7 @@ python -m tevatron.utils.format.convert_result_to_trec \
 
 #######################
 
-RUN_NAME="tech-AI2-1DEAT-Specter2Description"
+RUN_NAME="tech-AI2-1DEAT-Specter2Narrative"
 
 python -m tevatron.faiss_retriever \
     --query_reps "${INPUT_DIR}/topic_narrative.pkl" \
