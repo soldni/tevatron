@@ -1,6 +1,7 @@
 import os
 import pickle
 from contextlib import nullcontext
+from functools import partialmethod
 from pathlib import Path
 
 import numpy as np
@@ -17,13 +18,15 @@ from .base import SpecterModel, parse_arguments, setup_logger
 
 
 def main(
-    base_dir: str = "/net/nfs.cirrascale/s2-research/lucas/neuclir/2023/cls", **kwargs
+    base_dir: str = "/net/nfs.cirrascale/s2-research/lucas/neuclir/2023/cls",
+    encoded_name: str = "encoded.pkl",
+    **kwargs
 ):
     kwargs = {
         "model_name_or_path": "allenai/specter2_base",
         "dataset_name": "neuclir/csl/en_translation",
         "output_dir": base_dir,
-        "encoded_save_path": os.path.join(base_dir, "encoded.pkl"),
+        "encoded_save_path": os.path.join(base_dir, encoded_name),
         "add_pooler": False,
         # "dataset_proc_num": None,
         "p_max_len": 512,
@@ -59,6 +62,7 @@ def main(
             data_args=data_args,
             cache_dir=data_args.data_cache_dir or model_args.cache_dir,
         )
+        encode_dataset.query_field = data_args.query_field
     else:
         encode_dataset = HFCorpusDataset(
             tokenizer=tokenizer,

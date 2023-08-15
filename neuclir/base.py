@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import torch
@@ -20,7 +21,6 @@ class SpecterModel(DenseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.lm_q.load_adapter(
             "allenai/specter2_adhoc_query", source="hf", set_active=True
         )  # type: ignore
@@ -28,6 +28,8 @@ class SpecterModel(DenseModel):
         self.lm_p.load_adapter(
             "allenai/specter2_proximity", source="hf", set_active=True
         )  # type: ignore
+
+        self.use_passage_enc_for_query = False
 
     def encode_passage(self, psg):
         if psg is None:
@@ -38,7 +40,9 @@ class SpecterModel(DenseModel):
     def encode_query(self, qry):
         if qry is None:
             return None
-        qry_out = self.lm_q(**qry, return_dict=True)
+
+        encoder = self.lm_p if self.use_passage_enc_for_query else self.lm_q
+        qry_out = encoder(**qry, return_dict=True)
         return qry_out.last_hidden_state[:, 0, :]
 
     def compute_similarity(self, q_reps, p_reps):
@@ -61,13 +65,26 @@ class NeuclirCorpusPreprocessor(CorpusPreProcessor):
 
 
 class NeuclirQueryPreprocessor(QueryPreProcessor):
-    def __call__(self, example: dict) -> dict:
-        import ipdb
+    def __init__(
+        self, tokenizer, query_field: str = "topic_title", query_max_length: int = 32
+    ):
+        super().__init__(tokenizer=tokenizer, query_max_length=query_max_length)
 
-        ipdb.set_trace()
-        query_id = example["query_id"]
+    @property
+    def query_field(self):
+        return getattr(self, "_query_field", "topic_title")
+
+    @query_field.setter
+    def query_field(self, value):
+        self._query_field = value
+
+    def __call__(self, example: dict) -> dict:
+        query_id = example["topic_id"]
+        eng_queries = [q for q in example["topics"] if q["lang"] == "eng"]
+        assert len(eng_queries) == 1, "Only one English query is supported"
+
         query = self.tokenizer.encode(
-            example["query"],
+            eng_queries[0][self.query_field],
             add_special_tokens=False,
             max_length=self.query_max_length,
             truncation=True,
@@ -75,18 +92,34 @@ class NeuclirQueryPreprocessor(QueryPreProcessor):
         return {"text_id": query_id, "text": query}
 
 
-PROCESSOR_INFO["neuclir/csl"] = [
+PROCESSORS = [
     TrainPreProcessor,
     NeuclirQueryPreprocessor,
     NeuclirCorpusPreprocessor,
 ]
+PROCESSOR_INFO["neuclir/csl"] = PROCESSORS
+PROCESSOR_INFO["neuclir/csl-topics"] = PROCESSORS
+
+
+@dataclass
+class NeuclirDataArguments(DataArguments):
+    query_field: str = field(
+        default="topic_title", metadata={"help": "Field to use as query"}
+    )
+
+
+@dataclass
+class NeuclirModelArguments(ModelArguments):
+    use_passage_enc_for_query: bool = field(
+        default=False, metadata={"help": "Use passage encoder for query"}
+    )
 
 
 def parse_arguments(
     **kwargs,
-) -> Tuple[ModelArguments, DataArguments, TrainingArguments]:
+) -> Tuple[NeuclirModelArguments, NeuclirDataArguments, TrainingArguments]:
     parser = HfArgumentParser(
-        (ModelArguments, DataArguments, TrainingArguments)  # type: ignore
+        (NeuclirModelArguments, NeuclirDataArguments, TrainingArguments)  # type: ignore
     )
     model_args, data_args, training_args = parser.parse_dict(kwargs)
     return model_args, data_args, training_args
