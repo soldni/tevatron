@@ -4,6 +4,7 @@ parser = ArgumentParser()
 parser.add_argument('--input', type=str, required=True)
 parser.add_argument('--output', type=str, required=True)
 parser.add_argument('--remove_query', action='store_true')
+parser.add_argument('--name', type=str, default='dense')
 args = parser.parse_args()
 
 with open(args.input) as f_in, open(args.output, 'w') as f_out:
@@ -16,5 +17,5 @@ with open(args.input) as f_in, open(args.output, 'w') as f_out:
             rank = 0
         if args.remove_query and qid == docid:
             continue
-        rank += 1      
-        f_out.write(f'{qid} Q0 {docid} {rank} {score} dense\n')
+        rank += 1
+        f_out.write(f'{qid} Q0 {docid} {rank} {score} {args.name}\n')

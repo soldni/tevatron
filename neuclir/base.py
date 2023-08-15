@@ -43,7 +43,8 @@ class SpecterModel(DenseModel):
 
         encoder = self.lm_p if self.use_passage_enc_for_query else self.lm_q
         qry_out = encoder(**qry, return_dict=True)
-        return qry_out.last_hidden_state[:, 0, :]
+        output = qry_out.last_hidden_state[:, 0, :]
+        return output
 
     def compute_similarity(self, q_reps, p_reps):
         return torch.matmul(q_reps, p_reps.transpose(0, 1))
@@ -55,41 +56,34 @@ class NeuclirCorpusPreprocessor(CorpusPreProcessor):
         text = " ".join(
             (example["title"], self.tokenizer.sep_token, example.get("abstract", ""))
         ).strip()
-        text = self.tokenizer.encode(
+        doc = self.tokenizer(
             text,
+            padding=False,
+            truncation=True,
+            return_token_type_ids=False,
             add_special_tokens=False,
             max_length=self.text_max_length,
-            truncation=True,
         )
-        return {"text_id": docid, "text": text}
+        return {"text_id": docid, "text": doc.input_ids}
 
 
 class NeuclirQueryPreprocessor(QueryPreProcessor):
-    def __init__(
-        self, tokenizer, query_field: str = "topic_title", query_max_length: int = 32
-    ):
-        super().__init__(tokenizer=tokenizer, query_max_length=query_max_length)
-
-    @property
-    def query_field(self):
-        return getattr(self, "_query_field", "topic_title")
-
-    @query_field.setter
-    def query_field(self, value):
-        self._query_field = value
+    query_field: str = "topic_title"
 
     def __call__(self, example: dict) -> dict:
         query_id = example["topic_id"]
         eng_queries = [q for q in example["topics"] if q["lang"] == "eng"]
         assert len(eng_queries) == 1, "Only one English query is supported"
 
-        query = self.tokenizer.encode(
+        query = self.tokenizer(
             eng_queries[0][self.query_field],
+            padding=False,
+            truncation=True,
+            return_token_type_ids=False,
             add_special_tokens=False,
             max_length=self.query_max_length,
-            truncation=True,
         )
-        return {"text_id": query_id, "text": query}
+        return {"text_id": query_id, "text": query.input_ids}
 
 
 PROCESSORS = [

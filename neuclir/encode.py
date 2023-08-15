@@ -1,11 +1,11 @@
 import os
 import pickle
 from contextlib import nullcontext
-from functools import partialmethod
 from pathlib import Path
 
 import numpy as np
 import torch
+from datasets import disable_caching
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoConfig, AutoTokenizer
@@ -18,8 +18,8 @@ from .base import SpecterModel, parse_arguments, setup_logger
 
 
 def main(
-    base_dir: str = "/net/nfs.cirrascale/s2-research/lucas/neuclir/2023/cls",
-    encoded_name: str = "encoded.pkl",
+    base_dir: str = "/net/nfs.cirrascale/s2-research/lucas/neuclir/2023/cls/encodings",
+    encoded_name: str = "documents.pkl",
     **kwargs
 ):
     kwargs = {
@@ -52,6 +52,7 @@ def main(
         config=config,
         cache_dir=model_args.cache_dir,
     )
+    model.use_passage_enc_for_query = model_args.use_passage_enc_for_query
 
     text_max_length = (
         data_args.q_max_len if data_args.encode_is_qry else data_args.p_max_len
@@ -62,13 +63,17 @@ def main(
             data_args=data_args,
             cache_dir=data_args.data_cache_dir or model_args.cache_dir,
         )
-        encode_dataset.query_field = data_args.query_field
+        encode_dataset.preprocessor.query_field = data_args.query_field
     else:
         encode_dataset = HFCorpusDataset(
             tokenizer=tokenizer,
             data_args=data_args,
             cache_dir=data_args.data_cache_dir or model_args.cache_dir,
         )
+
+    # we don't want to cache the transformations
+    disable_caching()
+
     encode_dataset = EncodeDataset(
         dataset=encode_dataset.process(
             shard_num=data_args.encode_num_shard, shard_idx=data_args.encode_shard_index
